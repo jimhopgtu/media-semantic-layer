@@ -1,0 +1,191 @@
+# Semantic Models define the entities, dimensions, and measures that make up your metrics
+# These are the building blocks for the dbt Semantic Layer (MetricFlow)
+
+version: 2
+
+semantic_models:
+  - name: article_events
+    description: >
+      Fact table of all user interactions with articles (page views, scrolls, engagements).
+      This is the primary event-level table for calculating engagement metrics.
+    model: ref('fct_article_events')
+    defaults:
+      agg_time_dimension: event_date
+    
+    # Entities define the grain and relationships
+    entities:
+      - name: article
+        type: foreign
+        expr: article_id
+      - name: writer
+        type: foreign
+        expr: writer_id
+      - name: user
+        type: foreign
+        expr: user_pseudo_id
+      - name: session
+        type: foreign
+        expr: ga_session_id
+      - name: event
+        type: primary
+        expr: event_id
+    
+    # Dimensions for slicing and filtering
+    dimensions:
+      - name: event_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: event_timestamp
+        type: time
+        type_params:
+          time_granularity: second
+      - name: event_name
+        type: categorical
+      - name: device_category
+        type: categorical
+      - name: operating_system
+        type: categorical
+      - name: browser
+        type: categorical
+      - name: country
+        type: categorical
+      - name: region
+        type: categorical
+      - name: traffic_source
+        type: categorical
+      - name: traffic_medium
+        type: categorical
+    
+    # Measures are aggregations that become building blocks for metrics
+    measures:
+      - name: pageviews
+        description: Count of page_view events
+        agg: count
+        expr: CASE WHEN event_name = 'page_view' THEN 1 END
+      - name: unique_users
+        description: Distinct count of users
+        agg: count_distinct
+        expr: user_pseudo_id
+      - name: unique_sessions
+        description: Distinct count of sessions
+        agg: count_distinct
+        expr: ga_session_id
+      - name: scroll_events
+        description: Count of scroll events
+        agg: count
+        expr: CASE WHEN event_name = 'scroll' THEN 1 END
+      - name: scroll_75_plus
+        description: Count of scrolls reaching 75%+
+        agg: count
+        expr: CASE WHEN event_name = 'scroll' AND percent_scrolled >= 75 THEN 1 END
+      - name: total_engagement_time_msec
+        description: Sum of engagement time in milliseconds
+        agg: sum
+        expr: engagement_time_msec
+      - name: events
+        description: Total count of all events
+        agg: count
+
+  - name: articles
+    description: >
+      Dimension table for article attributes including AI-enriched sentiment scores.
+      Join this to article_events via article_id.
+    model: ref('dim_articles')
+    defaults:
+      agg_time_dimension: publish_date
+    
+    entities:
+      - name: article
+        type: primary
+        expr: article_id
+      - name: writer
+        type: foreign
+        expr: writer_id
+    
+    dimensions:
+      - name: article_id
+        type: categorical
+      - name: title
+        type: categorical
+      - name: publish_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: category
+        type: categorical
+      - name: word_count
+        type: categorical
+        expr: CASE 
+          WHEN word_count < 500 THEN 'short'
+          WHEN word_count < 1000 THEN 'medium'
+          WHEN word_count < 2000 THEN 'long'
+          ELSE 'very_long'
+        END
+      - name: is_premium
+        type: categorical
+      - name: sentiment_label
+        type: categorical
+        description: AI-enriched sentiment (POSITIVE, NEGATIVE, NEUTRAL)
+    
+    measures:
+      - name: articles_count
+        description: Count of articles
+        agg: count
+      - name: avg_word_count
+        description: Average word count
+        agg: average
+        expr: word_count
+      - name: avg_rpm
+        description: Average revenue per thousand impressions
+        agg: average
+        expr: estimated_rpm
+      - name: avg_sentiment_positive
+        description: Average positive sentiment score (0-1)
+        agg: average
+        expr: sentiment_score_positive
+      - name: avg_sentiment_negative
+        description: Average negative sentiment score (0-1)
+        agg: average
+        expr: sentiment_score_negative
+      - name: total_potential_revenue
+        description: Sum of estimated RPM across articles
+        agg: sum
+        expr: estimated_rpm
+
+  - name: writers
+    description: >
+      Dimension table for writer/author attributes.
+      Join this to articles or article_events via writer_id.
+    model: ref('dim_writers')
+    
+    entities:
+      - name: writer
+        type: primary
+        expr: writer_id
+    
+    dimensions:
+      - name: writer_id
+        type: categorical
+      - name: writer_name
+        type: categorical
+      - name: primary_category
+        type: categorical
+      - name: tenure_start_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: contract_type
+        type: categorical
+      - name: tenure_years
+        type: categorical
+        expr: DATEDIFF(year, tenure_start_date, CURRENT_DATE())
+    
+    measures:
+      - name: writers_count
+        description: Count of writers
+        agg: count
+      - name: avg_monthly_target
+        description: Average monthly article target
+        agg: average
+        expr: target_articles_per_month

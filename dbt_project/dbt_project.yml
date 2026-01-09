@@ -1,0 +1,85 @@
+name: 'media_semantic_layer'
+version: '1.0.0'
+config-version: 2
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'media_semantic_layer'
+
+# These configurations specify where dbt should look for different types of files.
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+# Model configurations
+models:
+  media_semantic_layer:
+    # Staging models: Clean and normalize raw data
+    staging:
+      +materialized: view
+      +schema: staging
+      +docs:
+        node_color: "#80CBC4"  # Teal for staging
+    
+    # Marts: Business logic and aggregations
+    marts:
+      +materialized: table
+      +schema: marts
+      +docs:
+        node_color: "#4FC3F7"  # Blue for marts
+    
+    # Semantic models: MetricFlow definitions
+    semantic:
+      +materialized: view
+      +schema: semantic
+      +docs:
+        node_color: "#FFB74D"  # Orange for semantic
+
+# Semantic layer configuration (MetricFlow)
+semantic-models:
+  +enabled: true
+
+# Test configurations
+tests:
+  +store_failures: true
+  +schema: test_results
+
+# Snapshot configurations
+snapshots:
+  +target_schema: snapshots
+
+# Seed configurations
+seeds:
+  +schema: seeds
+  
+# Documentation
+docs:
+  generate:
+    enabled: true
+
+# Variables
+vars:
+  # Date ranges for incremental models
+  start_date: '2024-10-01'
+  end_date: '2025-01-07'
+  
+  # Hugging Face configuration (set via env vars in production)
+  huggingface_api_url: 'https://api-inference.huggingface.co/models'
+  sentiment_model: 'distilbert-base-uncased-finetuned-sst-2-english'
+  topic_model: 'facebook/bart-large-mnli'
+  
+  # Business logic thresholds
+  min_pageviews_for_metrics: 10
+  premium_rpm_threshold: 8.0
+  high_engagement_threshold_sec: 60
+
+# Dispatch for compatibility
+dispatch:
+  - macro_namespace: dbt
+    search_order: ['media_semantic_layer', 'dbt']

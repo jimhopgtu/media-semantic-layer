@@ -1,0 +1,197 @@
+# Metrics are the governed, business-defined KPIs that users will query
+# These are built from the measures and dimensions in semantic_models
+
+version: 2
+
+metrics:
+  # === ENGAGEMENT METRICS ===
+  
+  - name: total_pageviews
+    description: >
+      Total number of page view events across all articles.
+      Core engagement metric used for revenue calculations and reach analysis.
+    type: simple
+    label: Total Pageviews
+    type_params:
+      measure: pageviews
+    meta:
+      dashboard_group: engagement
+      format: number
+
+  - name: unique_users
+    description: >
+      Count of distinct users who viewed content.
+      Reach metric showing audience size.
+    type: simple
+    label: Unique Users
+    type_params:
+      measure: unique_users
+    meta:
+      dashboard_group: engagement
+      format: number
+
+  - name: avg_engagement_time_sec
+    description: >
+      Average time users spent engaged with content, in seconds.
+      Quality metric excluding bounces (engagement time > 0).
+      Higher values indicate more compelling content.
+    type: ratio
+    label: Avg Engagement Time (sec)
+    type_params:
+      numerator: total_engagement_time_msec
+      denominator: pageviews
+      # Note: In the final SQL, we'll divide by 1000 to convert msec -> sec
+    meta:
+      dashboard_group: engagement
+      format: decimal_1
+
+  - name: scroll_completion_rate
+    description: >
+      Percentage of page views where user scrolled to 75% or more of the article.
+      Content quality proxy - higher rates suggest engaging, well-structured content.
+    type: ratio
+    label: Scroll Completion Rate
+    type_params:
+      numerator: scroll_75_plus
+      denominator: pageviews
+    meta:
+      dashboard_group: engagement
+      format: percentage
+      
+  # === REVENUE METRICS ===
+  
+  - name: estimated_revenue
+    description: >
+      Estimated advertising revenue based on pageviews and article RPM (revenue per thousand).
+      Formula: (total_pageviews / 1000) * avg_rpm
+      Used for writer profitability analysis and content ROI.
+    type: derived
+    label: Estimated Revenue ($)
+    type_params:
+      expr: (total_pageviews / 1000.0) * avg_rpm
+      metrics:
+        - total_pageviews
+        - avg_rpm
+    meta:
+      dashboard_group: revenue
+      format: currency_usd
+
+  - name: revenue_per_article
+    description: >
+      Average estimated revenue generated per article.
+      Writer productivity metric - indicates content efficiency.
+      Formula: estimated_revenue / count(distinct articles)
+    type: derived
+    label: Revenue per Article ($)
+    type_params:
+      expr: estimated_revenue / NULLIF(articles_count, 0)
+      metrics:
+        - estimated_revenue
+        - articles_count
+    meta:
+      dashboard_group: revenue
+      format: currency_usd
+
+  # === AI-AUGMENTED METRICS ===
+  
+  - name: sentiment_adjusted_engagement
+    description: >
+      Engagement time weighted by positive sentiment score from AI analysis.
+      Combines behavioral data (engagement time) with AI-detected content quality (sentiment).
+      Formula: avg_engagement_time_sec * avg_sentiment_positive
+      Higher values indicate content that both engages users AND has positive sentiment.
+    type: derived
+    label: Sentiment-Adjusted Engagement
+    type_params:
+      expr: (total_engagement_time_msec / 1000.0 / NULLIF(pageviews, 0)) * avg_sentiment_positive
+      metrics:
+        - total_engagement_time_msec
+        - pageviews
+        - avg_sentiment_positive
+    meta:
+      dashboard_group: ai_enriched
+      format: decimal_2
+      requires_enrichment: true
+      tooltip: "Engagement time (sec) × positive sentiment score (0-1)"
+
+  # === SUPPORTING METRICS (not in primary 7, but useful) ===
+  
+  - name: articles_published
+    description: Count of unique articles published
+    type: simple
+    label: Articles Published
+    type_params:
+      measure: articles_count
+    meta:
+      dashboard_group: productivity
+      format: number
+
+  - name: avg_rpm
+    description: >
+      Average revenue per thousand impressions across articles.
+      Proxy for content monetization effectiveness.
+    type: simple
+    label: Avg RPM ($)
+    type_params:
+      measure: avg_rpm
+    meta:
+      dashboard_group: revenue
+      format: currency_usd
+
+  - name: premium_article_rate
+    description: Percentage of articles marked as premium (behind paywall)
+    type: ratio
+    label: Premium Article %
+    type_params:
+      numerator:
+        name: premium_articles
+        expr: CASE WHEN is_premium THEN 1 END
+        agg: count
+      denominator: articles_count
+    meta:
+      dashboard_group: content_mix
+      format: percentage
+
+  - name: positive_sentiment_rate
+    description: >
+      Percentage of articles classified as positive sentiment by AI.
+      Content tone metric from Hugging Face enrichment.
+    type: derived
+    label: Positive Sentiment %
+    type_params:
+      expr: COUNT(CASE WHEN sentiment_label = 'POSITIVE' THEN 1 END) / NULLIF(articles_count, 0)
+      metrics:
+        - articles_count
+    meta:
+      dashboard_group: ai_enriched
+      format: percentage
+      requires_enrichment: true
+
+# === METRIC GROUPS FOR DASHBOARD ORGANIZATION ===
+
+metric_groups:
+  - name: writer_scorecard
+    description: Key performance indicators for writer performance reviews
+    metrics:
+      - total_pageviews
+      - unique_users
+      - revenue_per_article
+      - avg_engagement_time_sec
+      - sentiment_adjusted_engagement
+      - articles_published
+  
+  - name: content_performance
+    description: Article-level engagement and quality metrics
+    metrics:
+      - total_pageviews
+      - avg_engagement_time_sec
+      - scroll_completion_rate
+      - positive_sentiment_rate
+  
+  - name: revenue_analysis
+    description: Monetization and profitability metrics
+    metrics:
+      - estimated_revenue
+      - revenue_per_article
+      - avg_rpm
+      - premium_article_rate

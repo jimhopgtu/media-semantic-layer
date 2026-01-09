@@ -1,0 +1,24 @@
+# Core dependencies for synthetic data generation
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Hugging Face integration
+requests>=2.31.0
+transformers>=4.35.0  # Optional: for local model testing
+
+# Snowflake connectivity
+snowflake-connector-python>=3.0.0
+snowflake-sqlalchemy>=1.5.0
+
+# Data validation
+great-expectations>=0.18.0  # Optional: for advanced data quality checks
+
+# CLI utilities
+click>=8.1.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0  # Progress bars
+
+# Development
+pytest>=7.4.0
+black>=23.0.0
+ruff>=0.1.0
