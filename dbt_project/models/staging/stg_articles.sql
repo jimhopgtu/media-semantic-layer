@@ -1,42 +1,52 @@
-with source as (
-    select * from {{ source('raw', 'article_metadata') }}
+-- models/staging/stg_articles.sql
+{{
+  config(
+    materialized='view',
+    tags=['staging', 'articles']
+  )
+}}
+
+WITH source AS (
+    SELECT * FROM {{ source('raw', 'article_metadata') }}
 ),
 
-max_date as (
-    select max(publish_date) as max_publish_date
-    from source
+max_date AS (
+    SELECT MAX(publish_date) AS max_publish_date
+    FROM source
 ),
 
-transformed as (
-    select
+transformed AS (
+    SELECT
+        -- Primary identifiers
         article_id,
         title,
-        slug,
         writer_id,
+        
+        -- Article attributes
+        publish_date::DATE AS publish_date,
         category,
-        subcategory,
-        tags,
-        publish_date::date as publish_date,
-        last_updated::timestamp as last_updated_at,
         word_count,
-        read_time_minutes,
         is_premium,
-        status,
-
-        -- AI enrichment fields (will be populated later)
+        estimated_rpm,
+        
+        -- AI enrichment fields (will be populated later in Week 1, Day 4)
         sentiment_score_positive,
         sentiment_score_negative,
         sentiment_label,
-        sentiment_enriched_at,
-
-        -- Calculated field: articles older than 30 days are considered evergreen
-        case
-            when publish_date <= dateadd(day, -30, (select max_publish_date from max_date))
-            then true
-            else false
-        end as is_evergreen
-
-    from source
+        sentiment_enriched_at::TIMESTAMP AS sentiment_enriched_at,
+        
+        -- Calculated fields
+        CASE 
+            WHEN publish_date <= DATEADD('day', -30, (SELECT max_publish_date FROM max_date))
+            THEN TRUE 
+            ELSE FALSE 
+        END AS is_evergreen,
+        
+        -- Metadata
+        _loaded_at::TIMESTAMP AS loaded_at,
+        _updated_at::TIMESTAMP AS updated_at
+        
+    FROM source
 )
 
-select * from transformed
+SELECT * FROM transformed
