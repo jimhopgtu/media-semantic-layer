@@ -1,0 +1,80 @@
+version: 2
+
+sources:
+  - name: raw
+    database: media_analytics
+    schema: raw
+    description: Raw data tables for media analytics platform
+
+    tables:
+      - name: events_raw
+        description: Raw GA4 event data stored as JSON
+        columns:
+          - name: raw_json
+            description: Raw JSON payload containing event data
+            tests:
+              - not_null
+          - name: _loaded_at
+            description: Timestamp when the record was loaded
+
+      - name: article_metadata
+        description: Article metadata including content details and AI enrichments
+        columns:
+          - name: article_id
+            description: Unique identifier for the article
+            tests:
+              - unique
+              - not_null
+          - name: title
+            description: Article title
+          - name: writer_id
+            description: Foreign key to writer_metadata
+          - name: publish_date
+            description: Date the article was published
+            tests:
+              - not_null
+          - name: category
+            description: Primary content category
+            tests:
+              - accepted_values:
+                  values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+          - name: word_count
+            description: Total word count of the article
+          - name: is_premium
+            description: Whether the article requires premium access
+          - name: estimated_rpm
+            description: Estimated revenue per thousand impressions
+          - name: sentiment_score_positive
+            description: AI-generated positive sentiment score
+          - name: sentiment_score_negative
+            description: AI-generated negative sentiment score
+          - name: sentiment_label
+            description: AI-generated sentiment classification
+          - name: sentiment_enriched_at
+            description: Timestamp when sentiment was analyzed
+          - name: _loaded_at
+            description: Timestamp when the record was loaded
+          - name: _updated_at
+            description: Timestamp when the record was last updated
+
+      - name: writer_metadata
+        description: Writer information and performance targets
+        columns:
+          - name: writer_id
+            description: Unique identifier for the writer
+            tests:
+              - unique
+              - not_null
+          - name: writer_name
+            description: Full name of the writer
+          - name: primary_category
+            description: Writer's main content category
+          - name: tenure_start_date
+            description: Date the writer joined
+          - name: contract_type
+            description: Type of employment contract
+            tests:
+              - accepted_values:
+                  values: ['staff', 'freelance', 'contractor']
+          - name: target_articles_per_month
+            description: Monthly article production target
