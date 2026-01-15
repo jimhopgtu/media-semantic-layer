@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: "Cleaned and parsed GA4-style event data with user interactions"
+    columns:
+      - name: event_date
+        description: "Date of event occurrence (YYYYMMDD format)"
+      - name: user_pseudo_id
+        description: "Anonymous user identifier from GA4"
