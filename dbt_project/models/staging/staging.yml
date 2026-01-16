@@ -2,9 +2,100 @@ version: 2
 
 models:
   - name: stg_events
-    description: "Cleaned and parsed GA4-style event data with user interactions"
+    description: Cleaned GA4-style event data
     columns:
       - name: event_date
-        description: "Date of event occurrence (YYYYMMDD format)"
+        tests:
+          - not_null
+      - name: event_timestamp
+        tests:
+          - not_null
+      - name: event_name
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['page_view', 'scroll', 'user_engagement', 'click', 'view_item']
       - name: user_pseudo_id
-        description: "Anonymous user identifier from GA4"
+        tests:
+          - not_null
+      - name: article_id
+        tests:
+          - not_null
+      - name: device_category
+        tests:
+          - accepted_values:
+              values: ['desktop', 'mobile', 'tablet']
+      - name: geo_country
+        tests:
+          - not_null
+      - name: traffic_source
+        tests:
+          - not_null
+      - name: traffic_medium
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['organic', 'social', 'email', 'none']
+
+  - name: stg_articles
+    description: Article catalog with metadata
+    columns:
+      - name: article_id
+        tests:
+          - unique
+          - not_null
+      - name: title
+        tests:
+          - not_null
+      - name: writer_id
+        tests:
+          - not_null
+      - name: category
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+      - name: word_count
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "word_count >= 300 AND word_count <= 3000"
+      - name: is_premium
+        tests:
+          - not_null
+      - name: estimated_rpm
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "estimated_rpm >= 0"
+      - name: is_evergreen
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+  - name: stg_writers
+    description: Writer profiles
+    columns:
+      - name: writer_id
+        tests:
+          - unique
+          - not_null
+      - name: writer_name
+        tests:
+          - not_null
+      - name: primary_category
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+      - name: contract_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['staff', 'freelance', 'contractor']
+      - name: tenure_months
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "tenure_months >= 0"

@@ -25,16 +25,25 @@ models:
     staging:
       +materialized: view
       +schema: staging
+      +persist_docs:
+        relation: true
+        columns: true
     
     # Marts: Business logic and aggregations
     marts:
       +materialized: table
       +schema: marts
+      +persist_docs:
+        relation: true
+        columns: true
     
     # Semantic models: MetricFlow definitions
     semantic:
       +materialized: view
       +schema: semantic
+      +persist_docs:
+        relation: true
+        columns: true
 
 # Semantic layer configuration (MetricFlow)
 semantic-models:
@@ -69,15 +78,6 @@ vars:
   premium_rpm_threshold: 8.0
   high_engagement_threshold_sec: 60
 
-models:
-  media_semantic_layer:
-    staging:
-      +materialized: view
-      +schema: staging
-      +persist_docs:
-        relation: true
-        columns: true
-        
 # Dispatch for compatibility
 dispatch:
   - macro_namespace: dbt

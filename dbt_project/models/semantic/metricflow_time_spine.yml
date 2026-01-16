@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: metricflow_time_spine
+    description: "Date spine for MetricFlow time-based calculations"
+
+semantic_models:
+  - name: time_spine
+    model: ref('metricflow_time_spine')
+    primary_entity: date_day
+    dimensions:
+      - name: date_day
+        type: time
+        type_params:
+          time_granularity: day

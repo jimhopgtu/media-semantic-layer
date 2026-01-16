@@ -1,0 +1,113 @@
+version: 2
+
+models:
+  - name: fct_article_events
+    description: >
+      Main fact table containing all article engagement events joined with article
+      and writer context. Each row represents a single user interaction with an article,
+      enriched with article metadata, sentiment scores, and writer information.
+    columns:
+      - name: event_id
+        description: Unique identifier for each event (MD5 hash of user_pseudo_id, ga_session_id, event_timestamp)
+        tests:
+          - not_null
+      - name: article_id
+        description: Foreign key to dim_articles
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_articles')
+              field: article_id
+      - name: writer_id
+        description: Foreign key to dim_writers
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_writers')
+              field: writer_id
+      - name: is_engaged
+        description: >
+          Boolean flag indicating meaningful engagement. TRUE when engagement_time_msec > 60000
+          (1 minute) OR percent_scrolled >= 75%
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      - name: engagement_time_sec
+        description: Time spent on article in seconds (engagement_time_msec / 1000)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "engagement_time_sec >= 0"
+      - name: revenue_estimate
+        description: Estimated revenue for this single pageview (estimated_rpm * 0.001)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "revenue_estimate >= 0"
+      - name: category
+        description: Article category (sports, finance, lifestyle, news, opinion)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+      - name: event_name
+        description: Type of event (page_view, scroll, user_engagement, click, view_item)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['page_view', 'scroll', 'user_engagement', 'click', 'view_item']
+
+  - name: dim_articles
+    description: >
+      Dimension table containing article metadata for lookups. Includes content attributes,
+      sentiment analysis results, and monetization metrics.
+    columns:
+      - name: article_id
+        description: Primary key - unique identifier for each article
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: Article headline
+        tests:
+          - not_null
+      - name: writer_id
+        description: Foreign key to dim_writers
+        tests:
+          - not_null
+      - name: category
+        description: Content vertical
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+      - name: is_premium
+        description: Whether article requires subscription
+        tests:
+          - not_null
+
+  - name: dim_writers
+    description: >
+      Dimension table containing writer information for lookups. Includes contract details,
+      tenure information, and content focus areas.
+    columns:
+      - name: writer_id
+        description: Primary key - unique identifier for each writer
+        tests:
+          - unique
+          - not_null
+      - name: writer_name
+        description: Full name of the writer
+        tests:
+          - not_null
+      - name: primary_category
+        description: Writer's main content vertical
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+      - name: contract_type
+        description: Employment relationship type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['staff', 'freelance', 'contractor']

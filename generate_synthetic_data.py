@@ -218,97 +218,128 @@ def generate_session_id(timestamp: int) -> str:
 
 
 def generate_events(articles: List[Dict], target_events: int) -> List[Dict]:
-    """Generate GA4-style events according to Contract 1"""
-    events = []
+    """Generate GA4-style events according to Contract 1 - OPTIMIZED VERSION"""
     
     start_date = datetime.strptime(CONFIG["start_date"], "%Y-%m-%d")
     end_date = datetime.strptime(CONFIG["end_date"], "%Y-%m-%d")
+    date_range_days = (end_date - start_date).days
     
-    # Create pool of synthetic users (simulate 50K unique visitors)
-    num_users = 50000
-    user_pool = [generate_user_id() for _ in range(num_users)]
-    
-    # Weight articles by recency for pageview distribution
-    # More recent articles get more traffic
-    article_weights = []
+    # Pre-compute article publish dates as datetime objects for faster comparison
+    article_publish_dates = []
     for article in articles:
         pub_date = datetime.strptime(article["publish_date"], "%Y-%m-%d")
+        article_publish_dates.append(pub_date)
+    
+    # Pre-compute article weights once
+    article_weights = []
+    for pub_date in article_publish_dates:
         days_old = (end_date - pub_date).days
-        # Exponential decay: newer articles get more traffic
         weight = max(1, 100 * (0.95 ** days_old))
         article_weights.append(weight)
     
+    # Pre-generate user pool
     print(f"Generating {target_events} events...")
+    print("  Creating user pool...")
+    num_users = 50000
+    user_pool = [generate_user_id() for _ in range(num_users)]
+    
+    # Pre-generate random choices for efficiency
+    print("  Pre-generating random data...")
+    event_types = random.choices(
+        CONFIG["event_types"],
+        weights=[80, 5, 10, 3, 2],
+        k=target_events
+    )
+    
+    article_indices = random.choices(
+        range(len(articles)),
+        weights=article_weights,
+        k=target_events
+    )
+    
+    user_indices = random.choices(range(num_users), k=target_events)
+    
+    device_categories = random.choices(
+        CONFIG["devices"],
+        weights=[45, 50, 5],
+        k=target_events
+    )
+    
+    countries = random.choices(["US", "CA", "GB", "AU"], weights=[85, 5, 5, 5], k=target_events)
+    
+    hour_weights = [2, 1, 1, 1, 1, 2, 3, 5, 7, 8, 9, 9, 9, 8, 8, 8, 9, 10, 10, 9, 8, 6, 4, 3]
+    hours = random.choices(range(24), weights=hour_weights, k=target_events)
+    
+    # Pre-generate random date offsets
+    days_offsets = [random.randint(0, date_range_days) for _ in range(target_events)]
+    
+    # Traffic sources
+    traffic_source_choices = random.choices(
+        CONFIG["traffic_sources"],
+        weights=[40, 15, 10, 20, 10, 5],
+        k=target_events
+    )
+    
+    # Static data
+    us_states = ["NY", "CA", "TX", "FL", "IL", "PA", "OH", "GA", "NC", "MI"]
+    cities = {
+        "NY": ["New York", "Buffalo", "Rochester"],
+        "CA": ["Los Angeles", "San Francisco", "San Diego"],
+        "TX": ["Houston", "Dallas", "Austin"]
+    }
+    
+    print("  Generating events in batches...")
+    events = []
+    filtered_count = 0
     
     for i in range(target_events):
-        if i % 50000 == 0:
-            print(f"  Progress: {i}/{target_events} events generated")
+        if i % 50000 == 0 and i > 0:
+            print(f"  Progress: {i}/{target_events} events generated ({len(events)} kept, {filtered_count} filtered)")
         
-        # Random timestamp within range
-        days_offset = random.randint(0, (end_date - start_date).days)
+        # Use pre-generated random data
+        event_name = event_types[i]
+        article_idx = article_indices[i]
+        article = articles[article_idx]
+        user_pseudo_id = user_pool[user_indices[i]]
+        device_category = device_categories[i]
+        country = countries[i]
+        hour = hours[i]
+        source, medium = traffic_source_choices[i]
+        days_offset = days_offsets[i]
+        
+        # Generate timestamp
         event_date = start_date + timedelta(days=days_offset)
-        hour = random.choices(range(24), weights=[
-            2, 1, 1, 1, 1, 2, 3, 5, 7, 8, 9, 9,  # midnight to noon
-            9, 8, 8, 8, 9, 10, 10, 9, 8, 6, 4, 3  # noon to midnight
-        ])[0]
-        minute = random.randint(0, 59)
-        second = random.randint(0, 59)
-        microsecond = random.randint(0, 999999)
+        event_datetime = event_date.replace(
+            hour=hour,
+            minute=random.randint(0, 59),
+            second=random.randint(0, 59),
+            microsecond=random.randint(0, 999999)
+        )
         
-        event_datetime = event_date.replace(hour=hour, minute=minute, second=second, microsecond=microsecond)
-        event_timestamp = int(event_datetime.timestamp() * 1000000)  # microseconds
+        # Date validation - skip if article not yet published
+        # Only compare dates (ignore time) to be less strict
+        article_pub_date = article_publish_dates[article_idx]
+        if event_date.date() < article_pub_date.date():
+            filtered_count += 1
+            continue
         
-        # Event type distribution: 80% page_view, others split remaining
-        event_name = random.choices(
-            CONFIG["event_types"],
-            weights=[80, 5, 10, 3, 2]
-        )[0]
-        
-        # Select article (weighted by recency)
-        article = random.choices(articles, weights=article_weights)[0]
-        
-        # Only include articles published before this event
-        if datetime.strptime(article["publish_date"], "%Y-%m-%d") > event_datetime:
-            # Skip this event or select an older article
-            valid_articles = [a for a in articles 
-                            if datetime.strptime(a["publish_date"], "%Y-%m-%d") <= event_datetime]
-            if not valid_articles:
-                continue
-            article = random.choice(valid_articles)
-        
-        # User and session
-        user_pseudo_id = random.choice(user_pool)
+        event_timestamp = int(event_datetime.timestamp() * 1000000)
         ga_session_id = generate_session_id(int(event_datetime.timestamp()))
         
-        # Device
-        device_category = random.choices(
-            CONFIG["devices"],
-            weights=[45, 50, 5]  # 45% desktop, 50% mobile, 5% tablet
-        )[0]
+        # Device details
         browser = random.choice(CONFIG["browsers"][device_category])
         operating_system = random.choice(CONFIG["operating_systems"][device_category])
         
-        # Geo (US-centric)
-        us_states = ["NY", "CA", "TX", "FL", "IL", "PA", "OH", "GA", "NC", "MI"]
-        country = random.choices(["US", "CA", "GB", "AU"], weights=[85, 5, 5, 5])[0]
+        # Geo
         region = random.choice(us_states) if country == "US" else ""
-        cities = {
-            "NY": ["New York", "Buffalo", "Rochester"],
-            "CA": ["Los Angeles", "San Francisco", "San Diego"],
-            "TX": ["Houston", "Dallas", "Austin"]
-        }
         city = random.choice(cities.get(region, ["Unknown"]))
         
-        # Traffic source
-        source, medium = random.choices(
-            CONFIG["traffic_sources"],
-            weights=[40, 15, 10, 20, 10, 5]  # Organic search dominant
-        )[0]
+        # Campaign
         campaign = None
         if medium in ["social", "email"]:
             campaign = f"{medium}_campaign_{random.randint(1, 5)}"
         
-        # Event params based on event type
+        # Event params
         event_params = [
             {"key": "article_id", "value": {"string_value": article["article_id"]}},
             {"key": "writer_id", "value": {"string_value": article["writer_id"]}}
@@ -320,23 +351,13 @@ def generate_events(articles: List[Dict], target_events: int) -> List[Dict]:
                 {"key": "page_location", "value": {"string_value": page_location}},
                 {"key": "page_title", "value": {"string_value": article["title"]}}
             ])
-        
         elif event_name == "scroll":
-            percent_scrolled = random.choices(
-                [25, 50, 75, 90, 100],
-                weights=[10, 20, 30, 25, 15]
-            )[0]
-            event_params.append(
-                {"key": "percent_scrolled", "value": {"int_value": percent_scrolled}}
-            )
-        
+            percent_scrolled = random.choices([25, 50, 75, 90, 100], weights=[10, 20, 30, 25, 15])[0]
+            event_params.append({"key": "percent_scrolled", "value": {"int_value": percent_scrolled}})
         elif event_name == "user_engagement":
-            # Engagement time: 30-180 seconds median
-            engagement_time = int(random.lognormvariate(4.5, 0.8) * 1000)  # milliseconds
-            engagement_time = max(5000, min(300000, engagement_time))  # 5s to 5min
-            event_params.append(
-                {"key": "engagement_time_msec", "value": {"int_value": engagement_time}}
-            )
+            engagement_time = int(random.lognormvariate(4.5, 0.8) * 1000)
+            engagement_time = max(5000, min(300000, engagement_time))
+            event_params.append({"key": "engagement_time_msec", "value": {"int_value": engagement_time}})
         
         # Build event record
         event = {
@@ -365,7 +386,8 @@ def generate_events(articles: List[Dict], target_events: int) -> List[Dict]:
         
         events.append(event)
     
-    # Sort by timestamp
+    print(f"  Generated {len(events)} events ({filtered_count} filtered out due to publish dates)")
+    print("  Sorting events by timestamp...")
     events.sort(key=lambda x: x["event_timestamp"])
     
     return events
