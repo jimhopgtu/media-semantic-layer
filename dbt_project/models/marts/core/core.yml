@@ -314,3 +314,242 @@ models:
         
       - name: experiment_name
         description: Human-readable name for the experiment
+
+  - name: mart_article_performance
+    description: |
+      Daily aggregated article performance metrics. This is the main table for 
+      article-level analytics and dashboard queries.
+      
+      **Grain:** One row per article per day
+      
+      **Use Cases:**
+      - Article performance dashboards
+      - Content strategy analysis
+      - A/B test result analysis
+      - Trending content identification
+      
+      **Key Business Logic:**
+      - Engagement rate = engaged users / unique viewers
+      - Quality engagement rate accounts for content sentiment
+      - Content age buckets track decay over time
+      
+    columns:
+      - name: article_id
+        description: Foreign key to dim_articles
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_articles')
+              field: article_id
+              
+      - name: event_date
+        description: Date of the metrics (part of grain)
+        tests:
+          - not_null
+          
+      - name: unique_viewers
+        description: Distinct users who viewed this article on this date
+        tests:
+          - not_null
+          
+      - name: engaged_users
+        description: Distinct users who were engaged (60s+ or 75%+ scroll)
+        
+      - name: engagement_rate
+        description: |
+          Percentage of viewers who engaged (engaged_users / unique_viewers).
+          Primary success metric for content performance.
+        
+      - name: quality_engagement_rate
+        description: |
+          Quality-adjusted engagement rate that prevents clickbait optimization.
+          Takes sentiment quality into account.
+          
+      - name: total_revenue
+        description: Total estimated revenue from this article on this date
+        
+      - name: revenue_per_viewer
+        description: Average revenue per unique viewer
+        
+      - name: actual_rpm
+        description: Actual RPM achieved (may differ from estimated_rpm)
+        
+      - name: avg_engagement_seconds
+        description: Average time users spent on article
+        
+      - name: avg_scroll_percent
+        description: Average scroll depth percentage
+        
+      - name: days_since_publish
+        description: Number of days between publish date and event date
+        
+      - name: content_age_bucket
+        description: |
+          Age classification for content freshness analysis:
+          - week_1: 0-7 days
+          - week_2_to_4: 8-30 days
+          - month_2_to_3: 31-90 days
+          - older: 90+ days
+          
+      - name: mobile_pct
+        description: Percentage of traffic from mobile devices
+        
+      - name: desktop_pct
+        description: Percentage of traffic from desktop devices
+
+  - name: mart_writer_performance
+    description: |
+      Weekly writer performance scorecards. Mirrors The Arena Group's writer 
+      profitability analytics system.
+      
+      **Grain:** One row per writer per week
+      
+      **Use Cases:**
+      - Writer productivity tracking
+      - Compensation/bonus calculations
+      - Editorial strategy (which writers to assign to what content)
+      - Writer development/coaching
+      
+      **Key Business Logic:**
+      - Revenue per article = primary profitability metric
+      - Productivity status tracks against monthly targets
+      - Quality tier identifies writers needing improvement
+      
+    columns:
+      - name: writer_id
+        description: Foreign key to dim_writers
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_writers')
+              field: writer_id
+              
+      - name: week_start_date
+        description: Start of the week (Monday) for this scorecard
+        tests:
+          - not_null
+          
+      - name: articles_published
+        description: Number of distinct articles published this week
+        tests:
+          - not_null
+          
+      - name: unique_viewers
+        description: Total distinct users across all articles this week
+        
+      - name: engaged_users
+        description: Total distinct engaged users across all articles
+        
+      - name: engagement_rate
+        description: Percentage of viewers who engaged with writer's content
+        
+      - name: revenue_per_article
+        description: |
+          Average revenue per article. Key profitability metric used for 
+          writer performance evaluation and compensation decisions.
+          
+      - name: avg_viewers_per_article
+        description: Average audience reach per article
+        
+      - name: quality_engagement_rate
+        description: |
+          Quality-adjusted engagement rate. Writers with low scores may be
+          optimizing for clicks over content quality.
+          
+      - name: productivity_status
+        description: |
+          Tracks against monthly article targets:
+          - on_target: Meeting or exceeding quota
+          - slightly_below: 80-99% of target
+          - below_target: < 80% of target
+        tests:
+          - accepted_values:
+              values: ['on_target', 'slightly_below', 'below_target']
+              
+      - name: quality_tier
+        description: |
+          Content quality classification based on quality-adjusted engagement:
+          - high_quality: >= 0.35
+          - good_quality: 0.25-0.34
+          - acceptable_quality: 0.15-0.24
+          - needs_improvement: < 0.15
+        tests:
+          - accepted_values:
+              values: ['high_quality', 'good_quality', 'acceptable_quality', 'needs_improvement']
+              
+      - name: premium_article_pct
+        description: Percentage of articles that are premium/paywalled
+        
+      - name: long_form_pct
+        description: Percentage of articles that are long-form (1000+ words)
+
+  - name: mart_engagement_summary
+    description: |
+      Pre-aggregated weekly engagement metrics by category, device, and traffic source.
+      Optimized for fast dashboard filtering and trending analysis.
+      
+      **Grain:** One row per week × category × device × traffic_medium
+      
+      **Use Cases:**
+      - Executive dashboards (fast queries)
+      - Category performance comparison
+      - Device optimization analysis
+      - Traffic source attribution
+      - Trend analysis over time
+      
+      **Performance Note:** This table is pre-aggregated to make dashboard 
+      queries extremely fast, especially with multiple filters applied.
+      
+    columns:
+      - name: week_start_date
+        description: Start of the week (Monday)
+        tests:
+          - not_null
+          
+      - name: article_category
+        description: Content category
+        tests:
+          - not_null
+          
+      - name: device_category
+        description: Device type (desktop, mobile, tablet)
+        tests:
+          - not_null
+          
+      - name: traffic_medium
+        description: Traffic source medium (organic, social, email, none)
+        tests:
+          - not_null
+          
+      - name: distinct_articles
+        description: Number of unique articles in this segment
+        
+      - name: unique_users
+        description: Number of unique users in this segment
+        
+      - name: engagement_rate
+        description: Percentage of users who engaged
+        
+      - name: quality_engagement_rate
+        description: Quality-adjusted engagement rate for this segment
+        
+      - name: avg_engagement_seconds
+        description: Average engagement time in seconds
+        
+      - name: total_revenue
+        description: Total revenue for this segment
+        
+      - name: revenue_per_user
+        description: Average revenue per user
+        
+      - name: effective_rpm
+        description: Actual RPM achieved in this segment
+        
+      - name: events_per_session
+        description: Average events per session (stickiness metric)
+        
+      - name: premium_pct
+        description: Percentage of events from premium content
+        
+      - name: long_form_pct
+        description: Percentage of events from long-form content

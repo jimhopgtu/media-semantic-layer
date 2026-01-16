@@ -13,7 +13,7 @@ WITH source AS (
 parsed AS (
     SELECT
         -- Event identifiers
-        raw_json:event_date::STRING AS event_date,
+        TO_DATE(raw_json:event_date::STRING, 'YYYYMMDD') AS event_date,
         TO_TIMESTAMP(raw_json:event_timestamp::NUMBER / 1000000) AS event_timestamp,
         raw_json:event_name::STRING AS event_name,
         raw_json:user_pseudo_id::STRING AS user_pseudo_id,
