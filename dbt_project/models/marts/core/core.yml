@@ -1,0 +1,316 @@
+version: 2
+
+models:
+  - name: dim_articles
+    description: |
+      Article dimension table containing all article metadata with derived classifications.
+      This is a Type 1 SCD (updates in place) as we don't need historical article attribute tracking.
+      
+      **Grain:** One row per article
+      
+      **Key Business Rules:**
+      - Content length buckets based on word count thresholds
+      - RPM tier classification for revenue analysis
+      - Quality score derived from AI sentiment (prevents clickbait optimization)
+      
+    columns:
+      - name: article_id
+        description: Primary key - unique identifier for each article
+        tests:
+          - unique
+          - not_null
+          
+      - name: title
+        description: Article headline/title
+        tests:
+          - not_null
+          
+      - name: writer_id
+        description: Foreign key to dim_writers
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_writers')
+              field: writer_id
+              
+      - name: publish_date
+        description: Date article was published
+        tests:
+          - not_null
+          
+      - name: category
+        description: Content category (sports, finance, lifestyle, news, opinion)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+              
+      - name: word_count
+        description: Total word count of article content
+        tests:
+          - not_null
+          
+      - name: content_length_bucket
+        description: |
+          Derived classification:
+          - short: < 500 words
+          - medium: 500-999 words  
+          - long: 1000-1999 words
+          - very_long: 2000+ words
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['short', 'medium', 'long', 'very_long']
+              
+      - name: is_premium
+        description: Boolean flag indicating if article is behind paywall
+        tests:
+          - not_null
+          
+      - name: estimated_rpm
+        description: Estimated revenue per thousand impressions (RPM) for this article
+        tests:
+          - not_null
+          
+      - name: rpm_tier
+        description: |
+          Revenue tier classification:
+          - high: RPM >= 8.0
+          - medium: 5.0 <= RPM < 8.0
+          - low: RPM < 5.0
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['high', 'medium', 'low']
+              
+      - name: is_evergreen
+        description: Boolean indicating if content is still relevant after 30+ days
+        tests:
+          - not_null
+          
+      - name: sentiment_label
+        description: AI-generated sentiment classification (POSITIVE, NEGATIVE, NEUTRAL)
+        
+      - name: quality_score
+        description: |
+          Composite quality metric (0-1) derived from sentiment.
+          Used to prevent clickbait optimization in experiments.
+          - POSITIVE sentiment: uses positive score
+          - NEGATIVE sentiment: uses (1 - negative score)
+          - NEUTRAL/missing: defaults to 0.5
+          
+      - name: dim_updated_at
+        description: Timestamp when dimension record was last updated
+        tests:
+          - not_null
+
+  - name: dim_writers
+    description: |
+      Writer dimension table containing all writer profiles and derived classifications.
+      Type 1 SCD - we don't track historical changes to writer attributes.
+      
+      **Grain:** One row per writer
+      
+      **Key Business Rules:**
+      - Experience levels based on tenure months
+      - Productivity tiers based on article quotas
+      
+    columns:
+      - name: writer_id
+        description: Primary key - unique identifier for each writer
+        tests:
+          - unique
+          - not_null
+          
+      - name: writer_name
+        description: Full name of the writer
+        tests:
+          - not_null
+          
+      - name: primary_category
+        description: Main content category this writer covers
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sports', 'finance', 'lifestyle', 'news', 'opinion']
+              
+      - name: tenure_start_date
+        description: Date writer began working with organization
+        tests:
+          - not_null
+          
+      - name: contract_type
+        description: Employment classification (staff, freelance, contractor)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['staff', 'freelance', 'contractor']
+              
+      - name: target_articles_per_month
+        description: Expected monthly article output for this writer
+        tests:
+          - not_null
+          
+      - name: tenure_months
+        description: Number of complete months since tenure_start_date
+        tests:
+          - not_null
+          
+      - name: experience_level
+        description: |
+          Derived classification based on tenure:
+          - new: < 6 months
+          - established: 6-23 months
+          - veteran: 24+ months
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['new', 'established', 'veteran']
+              
+      - name: employment_category
+        description: |
+          Simplified employment grouping:
+          - full_time: staff
+          - flexible: freelance or contractor
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['full_time', 'flexible', 'other']
+              
+      - name: productivity_tier
+        description: |
+          Classification based on article targets:
+          - high_volume: 20+ articles/month
+          - medium_volume: 10-19 articles/month
+          - low_volume: < 10 articles/month
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['high_volume', 'medium_volume', 'low_volume']
+
+  - name: fct_article_events
+    description: |
+      Fact table capturing all user interactions with articles at event grain.
+      This is the primary analytics table for engagement, revenue, and experimentation analysis.
+      
+      **Grain:** One row per event (user + article + timestamp)
+      
+      **Key Metrics:**
+      - Engagement flags (standard and high engagement thresholds)
+      - Revenue estimates (based on RPM)
+      - Quality-adjusted engagement (prevents clickbait optimization)
+      
+      **Important:** Quality-adjusted engagement only counts if user is engaged AND 
+      multiplies by sentiment quality score to penalize low-quality but engaging content.
+      
+    columns:
+      - name: user_pseudo_id
+        description: Anonymous user identifier (part of composite grain)
+        tests:
+          - not_null
+          
+      - name: ga_session_id
+        description: GA4 session identifier
+        tests:
+          - not_null
+          
+      - name: event_timestamp
+        description: Exact timestamp of event (part of composite grain)
+        tests:
+          - not_null
+          
+      - name: event_name
+        description: Type of event (page_view, scroll, user_engagement, click, view_item)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['page_view', 'scroll', 'user_engagement', 'click', 'view_item']
+              
+      - name: article_id
+        description: Foreign key to dim_articles
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_articles')
+              field: article_id
+              
+      - name: writer_id
+        description: Foreign key to dim_writers
+        tests:
+          - relationships:
+              to: ref('dim_writers')
+              field: writer_id
+              
+      - name: engagement_time_msec
+        description: Time user spent on article in milliseconds
+        
+      - name: percent_scrolled
+        description: Percentage of article user scrolled through (0-100)
+        
+      - name: is_engaged
+        description: |
+          Boolean engagement flag (1/0):
+          - User spent 60+ seconds on article, OR
+          - User scrolled 75%+ of article
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              
+      - name: is_highly_engaged
+        description: |
+          Boolean high engagement flag (1/0):
+          - User spent 3+ minutes on article, OR
+          - User scrolled 90%+ of article
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              
+      - name: estimated_revenue
+        description: Estimated revenue for this event (RPM / 1000)
+        
+      - name: quality_adjusted_engagement
+        description: |
+          Quality-weighted engagement score (0-1):
+          - 0 if user not engaged
+          - sentiment quality_score if user is engaged
+          
+          This metric prevents optimizing for clickbait headlines that get clicks
+          but don't deliver quality content. Used as primary metric in experiments.
+          
+      - name: event_date
+        description: Date partition for the event
+        tests:
+          - not_null
+          
+      - name: device_category
+        description: Device type (desktop, mobile, tablet)
+        tests:
+          - accepted_values:
+              values: ['desktop', 'mobile', 'tablet']
+              
+      - name: article_category
+        description: Content category from article dimension
+        
+      - name: content_length_bucket
+        description: Article length classification from article dimension
+        
+      - name: rpm_tier
+        description: Revenue tier from article dimension
+        
+      - name: writer_experience_level
+        description: Writer experience classification from writer dimension
+
+  - name: dim_experiments
+    description: |
+      PLACEHOLDER dimension for experiments (Week 2).
+      Currently returns no rows. Will be fully implemented when experimentation
+      data is added to the pipeline.
+      
+    columns:
+      - name: experiment_id
+        description: Primary key - unique identifier for each experiment
+        
+      - name: experiment_name
+        description: Human-readable name for the experiment
