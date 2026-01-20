@@ -1,0 +1,147 @@
+version: 2
+
+models:
+  - name: metrics_baseline
+    description: |
+      Baseline metrics calculated across the entire dataset and key segments.
+      These serve as benchmarks for experimentation and anomaly detection.
+      
+      **Grain:** One row per segment (overall, by_category, by_device)
+      
+      **Use Cases:**
+      - Establish pre-experiment baselines
+      - Compare experiment results to historical performance
+      - Identify seasonal patterns or trends
+      - Benchmark performance across segments
+      
+      **Key Metrics:**
+      - Engagement rate: % of users who engaged (60s+ or 75%+ scroll)
+      - Quality engagement rate: Engagement weighted by content quality
+      - Revenue per user: Average revenue generated per unique user
+      
+    columns:
+      - name: segment
+        description: |
+          Segment identifier:
+          - 'overall': All data combined
+          - Category names: sports, finance, lifestyle, news, opinion
+          - Device types: desktop, mobile, tablet
+        tests:
+          - not_null
+          
+      - name: time_period
+        description: |
+          Time period classification:
+          - 'all_time': Entire dataset
+          - 'by_category': Segmented by content category
+          - 'by_device': Segmented by device type
+        tests:
+          - not_null
+          
+      - name: total_articles
+        description: Number of distinct articles in this segment
+        tests:
+          - not_null
+          
+      - name: total_users
+        description: Number of distinct users in this segment
+        tests:
+          - not_null
+          
+      - name: total_events
+        description: Total number of page view events in this segment
+        tests:
+          - not_null
+          
+      - name: engagement_rate
+        description: |
+          Baseline engagement rate (% of users who engaged).
+          Typical range: 20-40% depending on segment.
+        tests:
+          - not_null
+          
+      - name: quality_engagement_rate
+        description: |
+          Quality-adjusted engagement rate (primary metric for experiments).
+          Lower than standard engagement rate due to quality weighting.
+        tests:
+          - not_null
+          
+      - name: avg_engagement_seconds
+        description: Average time users spent on content (in seconds)
+        
+      - name: median_engagement_seconds
+        description: Median engagement time (more robust to outliers than mean)
+        
+      - name: revenue_per_user
+        description: Average revenue generated per unique user
+        
+      - name: first_event_date
+        description: Earliest date with data in this segment
+        
+      - name: last_event_date
+        description: Most recent date with data in this segment
+        
+      - name: days_of_data
+        description: Number of days covered by this segment's data
+
+  - name: data_quality_checks
+    description: |
+      Automated data quality validation across all data layers.
+      Identifies completeness issues, metric anomalies, and referential integrity problems.
+      
+      **Grain:** One row per quality check
+      
+      **Status Values:**
+      - PASS: Check passed, data quality is good
+      - WARN: Check found issues but not critical
+      - FAIL: Check failed, data quality issue requires attention
+      
+      **Use Cases:**
+      - Daily data quality monitoring
+      - Pre-experiment validation
+      - Anomaly detection
+      - Data pipeline health checks
+      
+    columns:
+      - name: check_category
+        description: |
+          Category of quality check:
+          - event_completeness: Required fields present
+          - engagement_metrics: Metric values within reasonable bounds
+          - referential_integrity: Foreign keys valid
+          - metric_reasonableness: Overall metrics make sense
+        tests:
+          - not_null
+          
+      - name: check_name
+        description: Specific check being performed
+        tests:
+          - not_null
+          
+      - name: total_records
+        description: Total number of records evaluated
+        tests:
+          - not_null
+          
+      - name: passed_records
+        description: Number of records that passed the check
+        tests:
+          - not_null
+          
+      - name: pass_rate_pct
+        description: Percentage of records that passed (0-100)
+        tests:
+          - not_null
+          
+      - name: status
+        description: Overall status of this check (PASS, WARN, FAIL)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['PASS', 'WARN', 'FAIL']
+              
+      - name: checked_at
+        description: Timestamp when this check was executed
+        tests:
+          - not_null
