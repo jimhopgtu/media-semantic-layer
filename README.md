@@ -311,37 +311,6 @@ This project demonstrates proficiency in:
 
 ---
 
-## 💼 Real-World Parallels
-
-### The Arena Group (Writer Profitability System)
-**Resume:** *"Built writer profitability analytics system in Python/SQL/Looker: automated weekly scorecards for 100+ writers"*
-
-**This Project:**
-- ✅ `mart_writer_performance` - Weekly scorecards with revenue/article
-- ✅ Quality tier classification (high/good/acceptable/needs_improvement)
-- ✅ Productivity tracking vs targets
-- ✅ Automated reporting (no manual Excel exports)
-
-### BrainJolt Media (Experimentation Framework)
-**Resume:** *"Implemented mature experimentation framework with hypothesis prioritization, power analysis, and automated statistical testing"*
-
-**This Project:**
-- ✅ 10 experiments with clear hypotheses
-- ✅ Power analysis (minimum sample sizes defined)
-- ✅ Automated statistical testing (z-test in SQL)
-- ✅ Winner determination based on composite metrics
-
-### Hearst (Self-Service Analytics)
-**Resume:** *"Established self-service analytics culture, training 150+ editors (reduced ad-hoc requests 70%)"*
-
-**This Project:**
-- ✅ Pre-aggregated marts (fast dashboard queries)
-- ✅ Clear metric definitions (documented in YAML)
-- ✅ Business-friendly naming conventions
-- ✅ Comprehensive documentation
-
----
-
 ## 📈 Sample Queries
 
 ### Find Clickbait Experiments
@@ -430,14 +399,13 @@ MIT License - feel free to use this as a template for your own projects.
 
 ## 👤 Author
 
-**James [Your Last Name]**
+**James Hopper (using Claude)**
 
-Senior Director of Analytics with 17+ years experience in analytics leadership across major media companies including The Arena Group, Hearst, BrainJolt Media, and FOX Corporation.
+VP/Director level Analytics with 17+ years experience in analytics leadership across major media companies including The Arena Group, Hearst, BrainJolt Media, and FOX Corporation.
 
-📧 [Your Email]  
-🔗 [LinkedIn](https://linkedin.com/in/yourprofile)  
-💻 [GitHub](https://github.com/yourusername)  
-🌐 [Portfolio](https://yourportfolio.com)
+📧 jameshopper@gmail.com  
+🔗 [LinkedIn](https://linkedin.com/in/jameshopper)  
+💻 [GitHub](https://github.com/jimhopgtu)  
 
 ---
 
@@ -446,7 +414,6 @@ Senior Director of Analytics with 17+ years experience in analytics leadership a
 - **dbt Labs** - For the best transformation framework
 - **Snowflake** - For the data cloud platform
 - **Preset** - For modern BI visualization
-- **Hugging Face** - For accessible AI/ML models
 - **The Arena Group, Hearst, BrainJolt, FOX** - For real-world analytics experience that informed this design
 
 ---
