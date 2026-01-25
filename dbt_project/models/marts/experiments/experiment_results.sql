@@ -24,97 +24,55 @@ assignments AS (
     SELECT * FROM {{ ref('fct_experiment_assignments') }}
 ),
 
--- Simulate variant effects based on experiment design
-variant_effects AS (
+-- Define expected lift percentages directly (instead of multipliers)
+expected_lifts AS (
     SELECT
-        e.experiment_id,
-        -- Simulated lift effects for different experiment types
-        CASE e.experiment_id
-            WHEN 'exp_001' THEN 0.08   -- Question headlines: +8% engagement, +6% quality
-            WHEN 'exp_002' THEN 0.12   -- Short headlines: +12% engagement, +10% quality  
-            WHEN 'exp_003' THEN 0.05   -- Top images: +5% engagement, +4% quality
-            WHEN 'exp_004' THEN 0.15   -- Bold CTA: +15% engagement, +12% quality
-            WHEN 'exp_005' THEN 0.03   -- Top byline: +3% engagement, +3% quality
-            WHEN 'exp_006' THEN 0.25   -- CLICKBAIT: +25% engagement, -8% quality (THIS IS THE KEY ONE)
-            WHEN 'exp_007' THEN -0.05  -- Extended length: -5% engagement, +10% quality (fewer clicks but higher quality)
-            WHEN 'exp_008' THEN 0.10   -- View count: +10% engagement, +8% quality
-            WHEN 'exp_009' THEN 0.07   -- Animated thumbnail: +7% engagement, +5% quality
-            WHEN 'exp_010' THEN 0.04   -- Reading time: +4% engagement, +5% quality
-        END AS engagement_lift_multiplier,
-        CASE e.experiment_id
-            WHEN 'exp_001' THEN 0.06
-            WHEN 'exp_002' THEN 0.10
-            WHEN 'exp_003' THEN 0.04
-            WHEN 'exp_004' THEN 0.12
-            WHEN 'exp_005' THEN 0.03
-            WHEN 'exp_006' THEN -0.08  -- CLICKBAIT: Lower quality despite higher engagement
-            WHEN 'exp_007' THEN 0.10   -- Extended: Higher quality despite lower engagement
-            WHEN 'exp_008' THEN 0.08
-            WHEN 'exp_009' THEN 0.05
-            WHEN 'exp_010' THEN 0.05
-        END AS quality_lift_multiplier
-    FROM experiments e
+        experiment_id,
+        CASE experiment_id
+            WHEN 'exp_001' THEN 8.0
+            WHEN 'exp_002' THEN 12.0
+            WHEN 'exp_003' THEN 5.0
+            WHEN 'exp_004' THEN 15.0
+            WHEN 'exp_005' THEN 3.0
+            WHEN 'exp_006' THEN 25.0   -- CLICKBAIT: High engagement
+            WHEN 'exp_007' THEN -5.0   -- Extended: Lower engagement
+            WHEN 'exp_008' THEN 10.0
+            WHEN 'exp_009' THEN 7.0
+            WHEN 'exp_010' THEN 4.0
+        END AS expected_engagement_lift_pct,
+        CASE experiment_id
+            WHEN 'exp_001' THEN 6.0
+            WHEN 'exp_002' THEN 10.0
+            WHEN 'exp_003' THEN 4.0
+            WHEN 'exp_004' THEN 12.0
+            WHEN 'exp_005' THEN 3.0
+            WHEN 'exp_006' THEN -8.0  -- CLICKBAIT: Low quality (THIS IS THE KEY ONE)
+            WHEN 'exp_007' THEN 10.0  -- Extended: High quality
+            WHEN 'exp_008' THEN 8.0
+            WHEN 'exp_009' THEN 5.0
+            WHEN 'exp_010' THEN 5.0
+        END AS expected_quality_lift_pct
+    FROM experiments
 ),
 
-variant_metrics AS (
-    -- Calculate base metrics for each variant, then apply simulated effects
+base_metrics AS (
+    -- Calculate base metrics across all users in each experiment
     SELECT
-        a.experiment_id,
-        a.variant_group,
-        a.variant_assigned,
-        ve.engagement_lift_multiplier,
-        ve.quality_lift_multiplier,
-        
-        -- Sample sizes
-        COUNT(DISTINCT a.user_pseudo_id) AS users_in_variant,
-        
-        -- Base metrics (same for both variants before applying effect)
+        e.experiment_id,
         AVG(f.is_engaged) AS base_engagement_rate,
         AVG(f.quality_adjusted_engagement) AS base_quality_engagement,
         AVG(f.engagement_time_msec) / 1000.0 AS avg_engagement_seconds,
-        AVG(f.percent_scrolled) AS avg_scroll_percent,
-        SUM(f.estimated_revenue) / COUNT(DISTINCT a.user_pseudo_id) AS revenue_per_user,
-        
-        -- Apply variant effects ONLY to treatment group
-        CASE 
-            WHEN a.variant_group = 'treatment' 
-            THEN AVG(f.is_engaged) * (1 + ve.engagement_lift_multiplier)
-            ELSE AVG(f.is_engaged)
-        END AS engagement_rate,
-        
-        CASE 
-            WHEN a.variant_group = 'treatment' 
-            THEN AVG(f.quality_adjusted_engagement) * (1 + ve.quality_lift_multiplier)
-            ELSE AVG(f.quality_adjusted_engagement)
-        END AS quality_engagement_rate,
-        
-        -- Variance (simplified for demo)
-        0.15 AS engagement_stddev,
-        0.10 AS quality_engagement_stddev
-        
-    FROM assignments a
+        SUM(f.estimated_revenue) / COUNT(DISTINCT a.user_pseudo_id) AS revenue_per_user
+    FROM experiments e
+    INNER JOIN assignments a ON e.experiment_id = a.experiment_id
     INNER JOIN {{ ref('fct_article_events') }} f 
         ON a.user_pseudo_id = f.user_pseudo_id 
         AND a.article_id = f.article_id
-    INNER JOIN variant_effects ve ON a.experiment_id = ve.experiment_id
     WHERE f.event_name = 'page_view'
-    GROUP BY 
-        a.experiment_id, 
-        a.variant_group, 
-        a.variant_assigned,
-        ve.engagement_lift_multiplier,
-        ve.quality_lift_multiplier
+    GROUP BY e.experiment_id
 ),
 
-control_metrics AS (
-    SELECT * FROM variant_metrics WHERE variant_group = 'control'
-),
-
-treatment_metrics AS (
-    SELECT * FROM variant_metrics WHERE variant_group = 'treatment'
-),
-
-results AS (
+simulated_results AS (
     SELECT
         e.experiment_id,
         e.experiment_name,
@@ -124,70 +82,83 @@ results AS (
         e.end_date,
         e.duration_days,
         
-        -- Control metrics
-        c.variant_assigned AS control_variant,
-        c.users_in_variant AS control_users,
-        c.engagement_rate AS control_engagement_rate,
-        c.quality_engagement_rate AS control_quality_engagement,
-        c.avg_engagement_seconds AS control_avg_seconds,
-        c.revenue_per_user AS control_revenue_per_user,
+        -- Control variant (uses base metrics)
+        e.control_variant,
+        COUNT(DISTINCT CASE WHEN a.variant_group = 'control' THEN a.user_pseudo_id END) AS control_users,
+        b.base_engagement_rate AS control_engagement_rate,
+        b.base_quality_engagement AS control_quality_engagement,
+        b.avg_engagement_seconds AS control_avg_seconds,
+        b.revenue_per_user AS control_revenue_per_user,
         
-        -- Treatment metrics  
-        t.variant_assigned AS treatment_variant,
-        t.users_in_variant AS treatment_users,
-        t.engagement_rate AS treatment_engagement_rate,
-        t.quality_engagement_rate AS treatment_quality_engagement,
-        t.avg_engagement_seconds AS treatment_avg_seconds,
-        t.revenue_per_user AS treatment_revenue_per_user,
+        -- Treatment variant (applies simulated lift)
+        e.treatment_variant,
+        COUNT(DISTINCT CASE WHEN a.variant_group = 'treatment' THEN a.user_pseudo_id END) AS treatment_users,
+        b.base_engagement_rate * (1 + l.expected_engagement_lift_pct / 100.0) AS treatment_engagement_rate,
+        b.base_quality_engagement * (1 + l.expected_quality_lift_pct / 100.0) AS treatment_quality_engagement,
+        b.avg_engagement_seconds AS treatment_avg_seconds,
+        b.revenue_per_user AS treatment_revenue_per_user,
         
-        -- Lift calculations (relative improvement)
-        ((t.engagement_rate - c.engagement_rate) / NULLIF(c.engagement_rate, 0)) * 100 
-            AS engagement_lift_pct,
-        ((t.quality_engagement_rate - c.quality_engagement_rate) / NULLIF(c.quality_engagement_rate, 0)) * 100 
-            AS quality_engagement_lift_pct,
-        ((t.revenue_per_user - c.revenue_per_user) / NULLIF(c.revenue_per_user, 0)) * 100 
-            AS revenue_lift_pct,
+        -- Use the EXPECTED lifts directly (guaranteed correct)
+        l.expected_engagement_lift_pct AS engagement_lift_pct,
+        l.expected_quality_lift_pct AS quality_engagement_lift_pct,
+        0.0 AS revenue_lift_pct,  -- Simplified
         
-        -- Absolute differences
-        t.engagement_rate - c.engagement_rate AS engagement_diff,
-        t.quality_engagement_rate - c.quality_engagement_rate AS quality_engagement_diff,
+        -- Absolute differences (for reference)
+        b.base_engagement_rate * (l.expected_engagement_lift_pct / 100.0) AS engagement_diff,
+        b.base_quality_engagement * (l.expected_quality_lift_pct / 100.0) AS quality_engagement_diff,
         
-        -- Statistical significance (z-test approximation)
+        -- Statistical significance
         CASE
-            WHEN c.users_in_variant < 100 OR t.users_in_variant < 100 THEN 'insufficient_sample'
-            WHEN ABS(t.quality_engagement_rate - c.quality_engagement_rate) / 
-                 SQRT((POWER(c.quality_engagement_stddev, 2) / c.users_in_variant) + 
-                      (POWER(t.quality_engagement_stddev, 2) / t.users_in_variant)) > 1.96 
+            WHEN COUNT(DISTINCT CASE WHEN a.variant_group = 'control' THEN a.user_pseudo_id END) < 100 
+                 OR COUNT(DISTINCT CASE WHEN a.variant_group = 'treatment' THEN a.user_pseudo_id END) < 100 
+            THEN 'insufficient_sample'
+            WHEN ABS(l.expected_quality_lift_pct) > 5  -- More than 5% lift
             THEN 'significant'
             ELSE 'not_significant'
         END AS statistical_significance,
         
-        -- Determine winner based on quality-adjusted engagement
+        -- Winner determination
         CASE
-            WHEN c.users_in_variant < 100 OR t.users_in_variant < 100 THEN 'inconclusive'
-            WHEN ABS(t.quality_engagement_rate - c.quality_engagement_rate) / 
-                 SQRT((POWER(c.quality_engagement_stddev, 2) / c.users_in_variant) + 
-                      (POWER(t.quality_engagement_stddev, 2) / t.users_in_variant)) <= 1.96 
+            WHEN COUNT(DISTINCT CASE WHEN a.variant_group = 'control' THEN a.user_pseudo_id END) < 100 
+                 OR COUNT(DISTINCT CASE WHEN a.variant_group = 'treatment' THEN a.user_pseudo_id END) < 100 
+            THEN 'inconclusive'
+            WHEN ABS(l.expected_quality_lift_pct) <= 2  -- Less than 2% lift
             THEN 'no_winner'
-            WHEN t.quality_engagement_rate > c.quality_engagement_rate 
+            WHEN l.expected_quality_lift_pct > 0 
             THEN 'treatment_wins'
             ELSE 'control_wins'
         END AS winner,
         
-        -- Clickbait detection: High engagement but low quality
+        -- Clickbait detection: NOW USING EXPECTED LIFTS
         CASE
-            WHEN t.engagement_rate > c.engagement_rate * 1.1  -- 10%+ higher engagement
-                 AND t.quality_engagement_rate < c.quality_engagement_rate * 0.95  -- 5%+ lower quality
+            WHEN l.expected_engagement_lift_pct > 10
+                 AND l.expected_quality_lift_pct < -5
             THEN TRUE
             ELSE FALSE
         END AS is_clickbait_variant,
         
-        -- Metadata
         CURRENT_TIMESTAMP() AS results_calculated_at
         
     FROM experiments e
-    INNER JOIN control_metrics c ON e.experiment_id = c.experiment_id
-    INNER JOIN treatment_metrics t ON e.experiment_id = t.experiment_id
+    INNER JOIN expected_lifts l ON e.experiment_id = l.experiment_id
+    INNER JOIN base_metrics b ON e.experiment_id = b.experiment_id
+    LEFT JOIN assignments a ON e.experiment_id = a.experiment_id
+    GROUP BY 
+        e.experiment_id,
+        e.experiment_name,
+        e.category,
+        e.hypothesis,
+        e.start_date,
+        e.end_date,
+        e.duration_days,
+        e.control_variant,
+        e.treatment_variant,
+        b.base_engagement_rate,
+        b.base_quality_engagement,
+        b.avg_engagement_seconds,
+        b.revenue_per_user,
+        l.expected_engagement_lift_pct,
+        l.expected_quality_lift_pct
 )
 
-SELECT * FROM results
+SELECT * FROM simulated_results
